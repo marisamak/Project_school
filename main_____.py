@@ -79,7 +79,7 @@ async def start_command(message: types.Message):
         ],
         resize_keyboard=True,
     )
-    await message.answer("Привет! Я помогу тебе подготовиться к ЕГЭ по физике. Выбери действие:", reply_markup=keyboard)
+    await message.answer("Привет! Я помогу тебе подготовиться к ЕГЭ по физике. Выбери раздел:", reply_markup=keyboard)
 
 @router.message(lambda message: message.text == "📘 Теория")
 async def send_theory_menu(message: types.Message):
@@ -87,7 +87,7 @@ async def send_theory_menu(message: types.Message):
     for topic in theory_data["темы"]:
         button = InlineKeyboardButton(text=f"{topic['номер']}. {topic['название']}", callback_data=f"topic_{topic['номер']}")
         keyboard.inline_keyboard.append([button])
-    await message.answer("Выберите тему:", reply_markup=keyboard)
+    await message.answer("Выбери тему:", reply_markup=keyboard)
 
 @router.callback_query(lambda callback: callback.data.startswith("topic_"))
 async def handle_topic_selection(callback: CallbackQuery):
@@ -110,7 +110,7 @@ async def send_task_topics(message: types.Message):
     for topic in topics:
         keyboard.button(text=topic, callback_data=f"task_topic_{topic}")
     keyboard.adjust(1)
-    await message.answer("Выберите тему задач:", reply_markup=keyboard.as_markup())
+    await message.answer("Выбери тему задач:", reply_markup=keyboard.as_markup())
 
 
 @router.callback_query(lambda callback: callback.data.startswith("task_topic_"))
@@ -138,7 +138,7 @@ async def send_next_task(message: types.Message, user_id: int):
     index = user_state["current_task_index"]
 
     if index >= len(tasks):
-        await message.answer("🎉 Вы решили все задачи!")
+        await message.answer("🎉 Ты решил все задачи!")
         del user_tasks[user_id]
         return
 
@@ -160,7 +160,7 @@ async def send_test_topics(message: types.Message):
         button = InlineKeyboardButton(text=topic, callback_data=f"test_topic_{index}")
         keyboard.inline_keyboard.append([button])
 
-    await message.answer("Выберите тему теста:", reply_markup=keyboard)
+    await message.answer("Выбери тему теста:", reply_markup=keyboard)
 
 
 @router.callback_query(lambda callback: callback.data.startswith("test_topic_"))
@@ -202,7 +202,7 @@ async def send_next_test_question(message: types.Message, user_id: int):
     current_index = progress["current_question_index"]
 
     if current_index >= len(tests):
-        await message.answer("🎉 Вы прошли все вопросы по этой теме!")
+        await message.answer("🎉 Ты прошел все вопросы по этой теме!")
         del user_test_progress[user_id]
         return
 
@@ -223,7 +223,7 @@ async def send_next_test_question(message: types.Message, user_id: int):
     ])
 
     # Отправляем список вариантов ответов кнопками
-    await message.answer("Выберите вариант ответа:", reply_markup=keyboard)
+    await message.answer("Выбери вариант ответа:", reply_markup=keyboard)
 
 @router.callback_query(lambda callback: callback.data.startswith("answer_"))
 async def handle_answer_selection(callback: CallbackQuery):
@@ -255,7 +255,7 @@ async def set_reminder(message: types.Message):
     """Переход в режим установки напоминания."""
     user_states[message.from_user.id] = "setting_reminder"  # Устанавливаем состояние пользователя
     await message.answer(
-        "⏰ Введите время, когда вы хотите получить напоминание, в формате ЧЧ:ММ. Например: 14:30"
+        "⏰ Введи время, когда ты хочешь получить напоминание, в формате ЧЧ:ММ. Например: 14:30"
     )
 
 
@@ -282,7 +282,7 @@ async def handle_task_answer(message: types.Message):
 
     if user_state is None:
         # Если пользователь не решает задачи
-        await message.answer("❌ Вы не решаете задачи сейчас. Выберите действие через меню.")
+        await message.answer("❌ Ты не решаешь задачи сейчас. Выбери действие через меню.")
         return
 
     tasks = user_state["tasks"]
@@ -290,7 +290,7 @@ async def handle_task_answer(message: types.Message):
 
     if index >= len(tasks):
         # Если задачи завершены
-        await message.answer("🎉 Вы решили все задачи!")
+        await message.answer("🎉 Ты решил все задачи!")
         del user_tasks[user_id]  # Удаляем из user_tasks
         del user_states[user_id]  # Удаляем из user_states
         return
@@ -304,7 +304,7 @@ async def handle_task_answer(message: types.Message):
         else:
             await message.answer(f"❌ Неправильно. Правильный ответ: {task['answer']}\n\n<b>Решение:</b> {task['solution']}", parse_mode="HTML")
     except ValueError:
-        await message.answer("❌ Введите числовой ответ.")
+        await message.answer("❌ Введи числовой ответ.")
 
     # Переход к следующей задаче
     user_tasks[user_id]["current_task_index"] += 1
@@ -316,7 +316,7 @@ async def handle_test_answer(message: types.Message):
     user_test_progress = user_test_progress.get(user_id)
 
     if user_test_progress is None:
-        await message.answer("❌ Вы не проходите тесты. Выберите действие через меню.")
+        await message.answer("❌ Ты не проходишь тесты. Выбери действие через меню.")
         return
 
     tests = user_test_progress["tests"]
@@ -324,7 +324,7 @@ async def handle_test_answer(message: types.Message):
 
     if index >= len(tests):
         # Если тест завершен
-        await message.answer("🎉 Вы прошли все тесты!")
+        await message.answer("🎉 Ты прошел все тесты!")
         del user_test_progress[user_id]  # Удаляем из user_test_progress
         del user_states[user_id]  # Удаляем из user_states
         return
@@ -384,7 +384,7 @@ async def handle_other_messages(message: types.Message):
         await set_reminder(message)  # Функция для установки напоминания
 
     else:
-        await message.answer("ℹ️ Я не понимаю эту команду. Выберите действие через меню.")
+        await message.answer("ℹ️ Я не понимаю эту команду. Выбери действие через меню.")
 
 
 @router.message()
@@ -413,7 +413,7 @@ async def process_user_message(message: types.Message):
             asyncio.create_task(schedule_reminder(user_id, remind_datetime))
             del user_states[user_id]
         except ValueError:
-            await message.answer("❌ Неправильный формат времени. Введите в формате ЧЧ:ММ (например, 14:30).")
+            await message.answer("❌ Неправильный формат времени. Введи в формате ЧЧ:ММ (например, 14:30).")
         return
 
     if user_id in user_tests:
@@ -431,7 +431,7 @@ async def process_user_message(message: types.Message):
             await send_next_test_question(message, user_id)
         return
 
-    await message.answer("ℹ️ Выберите действие через меню.", reply_markup=main_menu_keyboard)
+    await message.answer("ℹ️ Выбери действие через меню.", reply_markup=main_menu_keyboard)
 
 # === Главный блок ===
 async def main():
