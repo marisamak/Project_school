@@ -7,7 +7,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters import Command
 
 # === Конфигурация ===
-TOKEN = "8119842007:AAHK5nFjmAqxT7Fv1WDjj1LTAlsuFqSb3Yo"
+TOKEN = "8119842007:AAFuBm7Vyw8PYIMdEegV6R6YKw0xycF81JU"
 
 THEORY_FILE = "theory_.json"  # Файл с теорией
 TASKS_FILE = "tasks.json"  # Файл с задачами
@@ -79,7 +79,7 @@ async def start_command(message: types.Message):
         ],
         resize_keyboard=True,
     )
-    await message.answer("Привет! Я помогу тебе подготовиться к ЕГЭ по физике. Выбери раздел:", reply_markup=keyboard)
+    await message.answer("Привет! Я помогу тебе подготовиться к ЕГЭ по физике. Выбери действие:", reply_markup=keyboard)
 
 @router.message(lambda message: message.text == "📘 Теория")
 async def send_theory_menu(message: types.Message):
@@ -346,18 +346,17 @@ async def handle_test_answer(message: types.Message):
 async def process_user_message(message: types.Message):
     user_id = message.from_user.id
 
-    # Проверяем, в каком состоянии находится пользователь
+    # Проверяем, есть ли у пользователя активное состояние
     user_state = user_states.get(user_id, STATE_NONE)
 
     if user_state == STATE_TASKS:
-        # Обработка задач
         await handle_task_answer(message)
     elif user_state == STATE_TESTS:
-        # Обработка тестов
         await handle_test_answer(message)
+    elif user_state == "setting_reminder":
+        await set_reminder(message)
     else:
-        # Обработка других сообщений (например, команды)
-        await handle_other_messages(message)
+        await message.answer("ℹ️ Я не понимаю эту команду. Выбери действие через меню.")
 
 
 async def handle_other_messages(message: types.Message):
@@ -387,9 +386,26 @@ async def handle_other_messages(message: types.Message):
         await message.answer("ℹ️ Я не понимаю эту команду. Выбери действие через меню.")
 
 
-@router.message()
-async def process_user_message(message: types.Message):
+async def set_reminder(message: types.Message):
     user_id = message.from_user.id
+    try:
+        remind_time = datetime.strptime(message.text.strip(), "%H:%M").time()
+        now = datetime.now()
+        remind_datetime = datetime.combine(now.date(), remind_time)
+
+        if remind_datetime < now:
+            remind_datetime += timedelta(days=1)
+
+        user_reminders[user_id] = remind_datetime
+        await message.answer(f"✅ Напоминание установлено на {remind_datetime.strftime('%H:%M')}.")
+        asyncio.create_task(schedule_reminder(user_id, remind_datetime))
+
+        # Сбрасываем состояние пользователя
+        del user_states[user_id]
+    except ValueError:
+        await message.answer("❌ Неправильный формат времени. Введи в формате ЧЧ:ММ (например, 14:30).")
+
+    # Главное меню, если команда не распознана
     main_menu_keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📘 Теория")],
@@ -400,36 +416,6 @@ async def process_user_message(message: types.Message):
         ],
         resize_keyboard=True,
     )
-
-    if user_states.get(user_id) == "setting_reminder":
-        try:
-            remind_time = datetime.strptime(message.text.strip(), "%H:%M").time()
-            now = datetime.now()
-            remind_datetime = datetime.combine(now.date(), remind_time)
-            if remind_datetime < now:
-                remind_datetime += timedelta(days=1)
-            user_reminders[user_id] = remind_datetime
-            await message.answer(f"⏰ Напоминание установлено на {remind_datetime.strftime('%H:%M')}.")
-            asyncio.create_task(schedule_reminder(user_id, remind_datetime))
-            del user_states[user_id]
-        except ValueError:
-            await message.answer("❌ Неправильный формат времени. Введи в формате ЧЧ:ММ (например, 14:30).")
-        return
-
-    if user_id in user_tests:
-        test = user_tests[user_id]
-        user_answer = message.text.strip()
-        if check_answer(test, user_answer):
-            await message.answer("✅ Правильно!")
-        else:
-            await message.answer(f"❌ Неправильно. Правильный ответ: <b>{test['options'][test['answer'][0]]}</b>", parse_mode="HTML")
-        del user_tests[user_id]
-
-        # Переходим к следующему вопросу
-        if user_id in user_test_progress:
-            user_test_progress[user_id]["current_question_index"] += 1
-            await send_next_test_question(message, user_id)
-        return
 
     await message.answer("ℹ️ Выбери действие через меню.", reply_markup=main_menu_keyboard)
 
