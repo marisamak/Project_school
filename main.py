@@ -9,9 +9,9 @@ from aiogram.filters import Command
 # Конфигурация
 TOKEN = "8119842007:AAFuBm7Vyw8PYIMdEegV6R6YKw0xycF81JU"
 
-THEORY_FILE = "theory_.json"  # Файл с теорией
-TASKS_FILE = "tasks.json"  # Файл с задачами
-TESTS_FILE = "tests.json"  # Файл с тестами
+THEORY_FILE = "theory_.json"
+TASKS_FILE = "tasks.json"
+TESTS_FILE = "tests.json"
 
 # Инициализация
 bot = Bot(token=TOKEN)
@@ -23,8 +23,8 @@ dp.include_router(router)
 user_tests = {}
 user_states = {}
 user_reminders = {}
-user_test_progress = {}  # Для хранения прогресса теста
-user_tasks = {}  # Хранит задачи и текущий индекс для каждого пользователя
+user_test_progress = {}
+user_tasks = {}
 
 STATE_TASKS = "tasks"
 STATE_TESTS = "tests"
