@@ -6,6 +6,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.filters import Command
 
+
 # Конфигурация
 TOKEN = "8119842007:AAFuBm7Vyw8PYIMdEegV6R6YKw0xycF81JU"
 
@@ -13,11 +14,13 @@ THEORY_FILE = "theory_.json"
 TASKS_FILE = "tasks.json"
 TESTS_FILE = "tests.json"
 
+
 # Инициализация
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-router = Router()
+router = Router() # группирует обработчики сообщений и команд
 dp.include_router(router)
+
 
 # Словари для хранения состояний пользователей
 user_tests = {}
@@ -30,6 +33,7 @@ STATE_TASKS = "tasks"
 STATE_TESTS = "tests"
 STATE_NONE = "none"
 
+
 # Загрузка данных
 with open(THEORY_FILE, "r", encoding="utf-8") as f:
     theory_data = json.load(f)
@@ -38,9 +42,10 @@ with open("tasks.json", "r", encoding="utf-8") as f:
     tasks_data = json.load(f)
 
 with open(TESTS_FILE, "r", encoding="utf-8") as f:
-    tests_data = json.load(f)["tests"]  # Загружаем список тестов
+    tests_data = json.load(f)["tests"]
 
-# === Вспомогательные функции ===
+
+# Вспомогательные функции
 def check_answer(test, user_answer):
     try:
         user_answer_index = test["options"].index(user_answer)
@@ -55,17 +60,10 @@ def get_tests_by_topic(topic):
     for test in tests_data:
         if test["topic"] == topic:
             return test["questions"]
-    return []  # Если тема не найдена
+    return []  # если тема не найдена
 
-async def schedule_reminder(user_id, remind_time):
-    now = datetime.now()
-    delay = (remind_time - now).total_seconds()
-    await asyncio.sleep(delay)
-    if user_id in user_reminders and user_reminders[user_id] == remind_time:
-        del user_reminders[user_id]
-        await bot.send_message(user_id, "⏰ Напоминание! Время продолжить подготовку! 🚀")
 
-# === Хендлеры ===
+# Хендлер, главное меню
 @router.message(Command("start"))
 async def start_command(message: types.Message):
     keyboard = ReplyKeyboardMarkup(
@@ -80,6 +78,8 @@ async def start_command(message: types.Message):
     )
     await message.answer("Привет! Я помогу тебе подготовиться к ЕГЭ по физике. Выбери действие:", reply_markup=keyboard)
 
+
+# Хендлеры
 @router.message(lambda message: message.text == "📘 Теория")
 async def send_theory_menu(message: types.Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
@@ -88,10 +88,14 @@ async def send_theory_menu(message: types.Message):
         keyboard.inline_keyboard.append([button])
     await message.answer("Выбери тему:", reply_markup=keyboard)
 
-@router.callback_query(lambda callback: callback.data.startswith("topic_"))
+@router.callback_query(lambda callback: callback.data.startswith("topic_")) # callback - данные, которые отправляются боту, когда пользователь нажимает на кнопку Inline-клавиатуры
 async def handle_topic_selection(callback: CallbackQuery):
     topic_number = int(callback.data.split("_")[1])
     selected_topic = next((t for t in theory_data["темы"] if t["номер"] == topic_number), None)
+    # Генеративное выражение: перебирает все темы в списке.
+    # Фильтрует, оставляя ту, у которой номер совпадает с topic_number.
+    # Возвращает найденную тему
+
     if selected_topic:
         response = f"📘 <b>{selected_topic['название']}</b>\n\n{selected_topic['содержимое']}"
         await callback.message.answer(response, parse_mode="HTML")
@@ -99,18 +103,18 @@ async def handle_topic_selection(callback: CallbackQuery):
         await callback.message.answer("Тема не найдена.")
     await callback.answer()
 
+
 @router.message(lambda message: message.text == "📚 Задачи")
 async def send_task_topics(message: types.Message):
     user_id = message.from_user.id
     user_states[user_id] = STATE_TASKS  # Устанавливаем состояние пользователя в задачи
 
-    topics = set(task["topic"] for task in tasks_data["tasks"])
+    topics = set(task["topic"] for task in tasks_data["tasks"]) # Формируем список тем задач
     keyboard = InlineKeyboardBuilder()
     for topic in topics:
         keyboard.button(text=topic, callback_data=f"task_topic_{topic}")
     keyboard.adjust(1)
     await message.answer("Выбери тему задач:", reply_markup=keyboard.as_markup())
-
 
 @router.callback_query(lambda callback: callback.data.startswith("task_topic_"))
 async def handle_task_topic_selection(callback: CallbackQuery):
@@ -125,7 +129,6 @@ async def handle_task_topic_selection(callback: CallbackQuery):
     user_states[user_id] = STATE_TASKS  # Обновляем состояние пользователя на задачи
     await send_next_task(callback.message, user_id)
     await callback.answer()
-
 
 async def send_next_task(message: types.Message, user_id: int):
     if user_id not in user_tasks:
@@ -144,6 +147,42 @@ async def send_next_task(message: types.Message, user_id: int):
     task = tasks[index]
     await message.answer(f"📚 <b>Задача:</b>\n{task['question']}", parse_mode="HTML")
 
+# После завершения всех задач
+async def handle_task_answer(message: types.Message):
+    user_id = message.from_user.id
+    user_state = user_tasks.get(user_id)
+
+    if user_state is None:
+        # Если пользователь не решает задачи
+        await message.answer("❌ Ты не решаешь задачи сейчас. Выбери действие через меню.")
+        return
+
+    tasks = user_state["tasks"]
+    index = user_state["current_task_index"]
+
+    if index >= len(tasks):
+        # Если задачи завершены
+        await message.answer("🎉 Ты решил все задачи!")
+        del user_tasks[user_id]  # Удаляем из user_tasks
+        del user_states[user_id]  # Удаляем из user_states
+        return
+
+    task = tasks[index]
+    try:
+        # Проверка ответа пользователя
+        user_answer = float(message.text.strip())
+        if user_answer == task["answer"]:
+            await message.answer(f"✅ Правильный ответ!\n\n<b>Решение:</b> {task['solution']}", parse_mode="HTML")
+        else:
+            await message.answer(f"❌ Неправильно. Правильный ответ: {task['answer']}\n\n<b>Решение:</b> {task['solution']}", parse_mode="HTML")
+    except ValueError:
+        await message.answer("❌ Введи числовой ответ.")
+
+    # Переход к следующей задаче
+    user_tasks[user_id]["current_task_index"] += 1
+    await send_next_task(message, user_id)
+
+
 @router.message(lambda message: message.text == "📊 Тесты")
 async def send_test_topics(message: types.Message):
     user_id = message.from_user.id
@@ -160,7 +199,6 @@ async def send_test_topics(message: types.Message):
         keyboard.inline_keyboard.append([button])
 
     await message.answer("Выбери тему теста:", reply_markup=keyboard)
-
 
 @router.callback_query(lambda callback: callback.data.startswith("test_topic_"))
 async def handle_test_topic_selection(callback: CallbackQuery):
@@ -189,7 +227,6 @@ async def handle_test_topic_selection(callback: CallbackQuery):
     # Отправляем первый вопрос
     await send_next_test_question(callback.message, callback.from_user.id)
     await callback.answer()
-
 
 async def send_next_test_question(message: types.Message, user_id: int):
     if user_id not in user_test_progress:
@@ -249,67 +286,6 @@ async def handle_answer_selection(callback: CallbackQuery):
 
     await callback.answer()  # Закрываем всплывающее уведомление
 
-@router.message(lambda message: message.text == "⏰ Напоминания")
-async def set_reminder(message: types.Message):
-    # Переход в режим установки напоминания.
-    user_states[message.from_user.id] = "setting_reminder"  # Устанавливаем состояние пользователя
-    await message.answer(
-        "⏰ Введи время, когда ты хочешь получить напоминание, в формате ЧЧ:ММ. Например: 14:30"
-    )
-
-
-@router.message(lambda message: message.text == "🔗 Полезные ссылки")
-async def send_links(message: types.Message):
-    # Отправляет полезные ссылки для подготовки.
-    links = [
-        "https://fipi.ru/ege",
-        "https://ege.sdamgia.ru/",
-        "https://neznaika.info/",
-        "https://neofamily.ru/fizika/smart-directory",
-        "https://mizenko23.ru/wp-content/uploads/2019/04/jakovlev_fizika-polnyj_kurs_podgotovki_k_egeh.pdf",
-        "https://thenewschool.ru/trainer/physics",
-        "https://3.shkolkovo.online/catalog?SubjectId=4",
-
-    ]
-    links_text = "\n".join([f"🔗 <a href=\"{link}\">{link}</a>" for link in links])
-    await message.answer(f"Вот полезные ресурсы:\n{links_text}", parse_mode="HTML")
-
-# После завершения всех задач
-async def handle_task_answer(message: types.Message):
-    user_id = message.from_user.id
-    user_state = user_tasks.get(user_id)
-
-    if user_state is None:
-        # Если пользователь не решает задачи
-        await message.answer("❌ Ты не решаешь задачи сейчас. Выбери действие через меню.")
-        return
-
-    tasks = user_state["tasks"]
-    index = user_state["current_task_index"]
-
-    if index >= len(tasks):
-        # Если задачи завершены
-        await message.answer("🎉 Ты решил все задачи!")
-        del user_tasks[user_id]  # Удаляем из user_tasks
-        del user_states[user_id]  # Удаляем из user_states
-        return
-
-    task = tasks[index]
-    try:
-        # Проверка ответа пользователя
-        user_answer = float(message.text.strip())
-        if user_answer == task["answer"]:
-            await message.answer(f"✅ Правильный ответ!\n\n<b>Решение:</b> {task['solution']}", parse_mode="HTML")
-        else:
-            await message.answer(f"❌ Неправильно. Правильный ответ: {task['answer']}\n\n<b>Решение:</b> {task['solution']}", parse_mode="HTML")
-    except ValueError:
-        await message.answer("❌ Введи числовой ответ.")
-
-    # Переход к следующей задаче
-    user_tasks[user_id]["current_task_index"] += 1
-    await send_next_task(message, user_id)
-
-
 async def handle_test_answer(message: types.Message):
     user_id = message.from_user.id
     user_test_progress = user_test_progress.get(user_id)
@@ -341,49 +317,21 @@ async def handle_test_answer(message: types.Message):
     await send_next_test_question(message, user_id)
 
 
-@router.message()
-async def process_user_message(message: types.Message):
-    user_id = message.from_user.id
+@router.message(lambda message: message.text == "⏰ Напоминания")
+async def set_reminder(message: types.Message):
+    # Переход в режим установки напоминания.
+    user_states[message.from_user.id] = "setting_reminder"  # Устанавливаем состояние пользователя
+    await message.answer(
+        "⏰ Введи время, когда ты хочешь получить напоминание, в формате ЧЧ:ММ. Например: 14:30"
+    )
 
-    # Проверяем, есть ли у пользователя активное состояние
-    user_state = user_states.get(user_id, STATE_NONE)
-
-    if user_state == STATE_TASKS:
-        await handle_task_answer(message)
-    elif user_state == STATE_TESTS:
-        await handle_test_answer(message)
-    elif user_state == "setting_reminder":
-        await set_reminder(message)
-    else:
-        await message.answer("ℹ️ Я не понимаю эту команду. Выбери действие через меню.")
-
-
-async def handle_other_messages(message: types.Message):
-    user_id = message.from_user.id
-
-    # Логика для обработки команд
-    if message.text.lower() == "/start":
-        # Перезапуск меню
-        await start_command(message)  # Функция для начала работы с ботом
-
-    elif message.text.lower() == "📘 Теория":
-        await send_theory_menu(message)  # Функция для отправки теории
-
-    elif message.text.lower() == "📚 Задачи":
-        await send_task_topics(message)  # Функция для отправки списка задач
-
-    elif message.text.lower() == "📊 Тесты":
-        await send_test_topics(message)  # Функция для отправки списка тестов
-
-    elif message.text.lower() == "🔗 Полезные ссылки":
-        await send_links(message)  # Функция для отправки полезных ссылок
-
-    elif message.text.lower() == "⏰ Напоминания":
-        await set_reminder(message)  # Функция для установки напоминания
-
-    else:
-        await message.answer("ℹ️ Я не понимаю эту команду. Выбери действие через меню.")
-
+async def schedule_reminder(user_id, remind_time):
+    now = datetime.now()
+    delay = (remind_time - now).total_seconds()
+    await asyncio.sleep(delay)
+    if user_id in user_reminders and user_reminders[user_id] == remind_time:
+        del user_reminders[user_id]
+        await bot.send_message(user_id, "⏰ Напоминание! Время продолжить подготовку! 🚀")
 
 async def set_reminder(message: types.Message):
     user_id = message.from_user.id
@@ -418,7 +366,69 @@ async def set_reminder(message: types.Message):
 
     await message.answer("ℹ️ Выбери действие через меню.", reply_markup=main_menu_keyboard)
 
-# === Главный блок ===
+
+@router.message(lambda message: message.text == "🔗 Полезные ссылки")
+async def send_links(message: types.Message):
+
+    links = [
+        "https://fipi.ru/ege",
+        "https://ege.sdamgia.ru/",
+        "https://neznaika.info/",
+        "https://neofamily.ru/fizika/smart-directory",
+        "https://mizenko23.ru/wp-content/uploads/2019/04/jakovlev_fizika-polnyj_kurs_podgotovki_k_egeh.pdf",
+        "https://thenewschool.ru/trainer/physics",
+        "https://3.shkolkovo.online/catalog?SubjectId=4",
+
+    ]
+    links_text = "\n".join([f"🔗 <a href=\"{link}\">{link}</a>" for link in links])
+    await message.answer(f"Вот полезные ресурсы:\n{links_text}", parse_mode="HTML")
+
+
+@router.message()
+async def process_user_message(message: types.Message):
+    user_id = message.from_user.id
+
+    # Проверяем, есть ли у пользователя активное состояние
+    user_state = user_states.get(user_id, STATE_NONE)
+
+    if user_state == STATE_TASKS:
+        await handle_task_answer(message)
+    elif user_state == STATE_TESTS:
+        await handle_test_answer(message)
+    elif user_state == "setting_reminder":
+        await set_reminder(message)
+    else:
+        await message.answer("ℹ️ Я не понимаю эту команду. Выбери действие через меню.")
+
+
+async def handle_other_messages(message: types.Message):
+    user_id = message.from_user.id
+
+    # Логика для обработки команд
+    if message.text.lower() == "/start":
+        # Перезапуск меню
+        await start_command(message)
+
+    elif message.text.lower() == "📘 Теория":
+        await send_theory_menu(message)
+
+    elif message.text.lower() == "📚 Задачи":
+        await send_task_topics(message)
+
+    elif message.text.lower() == "📊 Тесты":
+        await send_test_topics(message)
+
+    elif message.text.lower() == "🔗 Полезные ссылки":
+        await send_links(message)
+
+    elif message.text.lower() == "⏰ Напоминания":
+        await set_reminder(message)
+
+    else:
+        await message.answer("ℹ️ Я не понимаю эту команду. Выбери действие через меню.")
+
+
+# Главный блок
 async def main():
     print("Бот запущен!")
     await dp.start_polling(bot)
